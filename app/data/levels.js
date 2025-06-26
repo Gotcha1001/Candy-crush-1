@@ -1,5 +1,5 @@
-// data/levels.js
 export const levels = [
+  // Existing levels 1-4
   {
     id: 1,
     gridSize: 8,
@@ -18,12 +18,131 @@ export const levels = [
     moves: 30,
     goal: { type: "jelly", count: 15 },
   },
-  // Example new level (Level 4)
   {
     id: 4,
-    gridSize: 10, // Larger grid
+    gridSize: 10,
     moves: 35,
-    goal: { type: "jelly", count: 25 }, // Harder challenge with more jellies
+    goal: { type: "jelly", count: 25 },
   },
-  // Add more levels here as needed
+  // New levels 5-24 with shells on bottom row and increasing difficulty
+  {
+    id: 5,
+    gridSize: 8,
+    moves: 25,
+    goal: { type: "score", target: 2000 },
+  },
+  {
+    id: 6,
+    gridSize: 8,
+    moves: 20,
+    goal: { type: "jelly", count: 15 },
+  },
+  {
+    id: 7,
+    gridSize: 8,
+    moves: 23,
+    goal: { type: "score", target: 2500 },
+  },
+  {
+    id: 8,
+    gridSize: 8,
+    moves: 18,
+    goal: { type: "jelly", count: 18 },
+  },
+  {
+    id: 9,
+    gridSize: 9,
+    moves: 25,
+    goal: { type: "score", target: 3000 },
+  },
+  {
+    id: 10,
+    gridSize: 9,
+    moves: 20,
+    goal: { type: "jelly", count: 20 },
+  },
+  {
+    id: 11,
+    gridSize: 9,
+    moves: 22,
+    goal: { type: "score", target: 3500 },
+  },
+  {
+    id: 12,
+    gridSize: 9,
+    moves: 18,
+    goal: { type: "jelly", count: 22 },
+  },
+  {
+    id: 13,
+    gridSize: 10,
+    moves: 25,
+    goal: { type: "score", target: 4000 },
+  },
+  {
+    id: 14,
+    gridSize: 10,
+    moves: 20,
+    goal: { type: "jelly", count: 25 },
+  },
+  {
+    id: 15,
+    gridSize: 10,
+    moves: 22,
+    goal: { type: "score", target: 4500 },
+  },
+  {
+    id: 16,
+    gridSize: 10,
+    moves: 18,
+    goal: { type: "jelly", count: 28 },
+  },
+  {
+    id: 17,
+    gridSize: 10,
+    moves: 20,
+    goal: { type: "score", target: 5000 },
+  },
+  {
+    id: 18,
+    gridSize: 10,
+    moves: 15,
+    goal: { type: "jelly", count: 30 },
+  },
+  {
+    id: 19,
+    gridSize: 10,
+    moves: 18,
+    goal: { type: "score", target: 5500 },
+  },
+  {
+    id: 20,
+    gridSize: 10,
+    moves: 12,
+    goal: { type: "jelly", count: 35 },
+  },
+  {
+    id: 21,
+    gridSize: 10,
+    moves: 15,
+    goal: { type: "score", target: 6000 },
+  },
+  {
+    id: 22,
+    gridSize: 10,
+    moves: 10,
+    goal: { type: "jelly", count: 40 },
+  },
+  {
+    id: 23,
+    gridSize: 10,
+    moves: 12,
+    goal: { type: "score", target: 6500 },
+  },
+  {
+    id: 24,
+    gridSize: 10,
+    moves: 8,
+    goal: { type: "jelly", count: 45 },
+  },
 ];
