@@ -2726,7 +2726,7 @@ const Candy = ({ candy, onDragStart, onDragOver, onDrop, onTouchStart, onTouchMo
             style={{
                 width: candySize,
                 height: candySize,
-                touchAction: shell && shell.hits > 0 ? "auto" : "none",
+                touchAction: shell && shell.hits > 0 ? "auto" : "manipulation", // Changed to manipulation
             }}
             draggable={!(shell && shell.hits > 0)}
             onDragStart={(e) => {
@@ -2744,10 +2744,17 @@ const Candy = ({ candy, onDragStart, onDragOver, onDrop, onTouchStart, onTouchMo
                     e.preventDefault();
                     return;
                 }
+                e.stopPropagation(); // Prevent parent elements from intercepting
                 onTouchStart(e, candy);
             }}
-            onTouchMove={onTouchMove}
-            onTouchEnd={(e) => onTouchEnd(e, candy)}
+            onTouchMove={(e) => {
+                e.stopPropagation();
+                onTouchMove(e);
+            }}
+            onTouchEnd={(e) => {
+                e.stopPropagation();
+                onTouchEnd(e, candy);
+            }}
             animate={{
                 scale: isDragging ? 1.2 : 1,
                 opacity: isMatched ? 0 : 1,
@@ -2797,7 +2804,7 @@ const GameGrid = ({
     }
 
     const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
-    const baseSize = isMobile ? 50 : 60; // Increased baseSize for mobile
+    const baseSize = isMobile ? 50 : 60;
     const maxSize = isMobile ? 55 : 80;
     const availableWidth = isMobile
         ? Math.min(window.innerWidth * 0.9, 400)
@@ -2993,6 +3000,26 @@ const GameComponent = ({ levelConfig }) => {
         };
     }, []);
 
+    // Native touchmove listener for mobile
+    useEffect(() => {
+        const handleMove = (e) => {
+            if (isAnimating) return;
+            e.preventDefault(); // Ensure preventDefault works
+            handleTouchMove(e);
+        };
+
+        const grid = document.querySelector(".grid");
+        if (grid) {
+            grid.addEventListener("touchmove", handleMove, { passive: false });
+        }
+
+        return () => {
+            if (grid) {
+                grid.removeEventListener("touchmove", handleMove);
+            }
+        };
+    }, [isAnimating]);
+
     // Check win condition
     useEffect(() => {
         if (gameStatus === "playing" && !isAnimating) {
@@ -3032,6 +3059,7 @@ const GameComponent = ({ levelConfig }) => {
         setDraggedCandy(candy);
         e.dataTransfer.effectAllowed = "move";
         e.dataTransfer.setData("text/plain", JSON.stringify(candy));
+        console.log("Drag start on candy:", JSON.stringify(candy));
     };
 
     const handleDragOver = (e, candy) => {
@@ -3122,6 +3150,7 @@ const GameComponent = ({ levelConfig }) => {
         touchStartPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
         setDraggedCandy(candy);
         console.log("Touch start on candy:", JSON.stringify(candy), "at", touchStartPos.current);
+        if (navigator.vibrate) navigator.vibrate(50); // Haptic feedback
     };
 
     const handleTouchMove = (e) => {
@@ -3131,9 +3160,11 @@ const GameComponent = ({ levelConfig }) => {
         const dy = touch.clientY - touchStartPos.current.y;
         const candySizeNum = parseFloat(candySize);
         const gridElement = document.querySelector(".grid");
-        if (!gridElement || !touchStartCandy.current) return;
+        if (!gridElement || !touchStartCandy.current) {
+            console.log("Touch move aborted: no grid or start candy");
+            return;
+        }
 
-        const gridRect = gridElement.getBoundingClientRect();
         const rowCount = grid.length;
         const colCount = grid[0].length;
 
@@ -3143,16 +3174,18 @@ const GameComponent = ({ levelConfig }) => {
         let targetRow = touchStartCandy.current.row;
         let targetCol = touchStartCandy.current.col;
 
-        if (absDx > absDy && absDx > candySizeNum * 0.3) {
+        console.log("Touch move detected, dx:", dx, "dy:", dy); // Debug log
+
+        if (absDx > absDy && absDx > candySizeNum * 0.2) { // Lowered threshold
             targetCol += dx > 0 ? 1 : -1;
-        } else if (absDy > absDx && absDy > candySizeNum * 0.3) {
+        } else if (absDy > absDx && absDy > candySizeNum * 0.2) {
             targetRow += dy > 0 ? 1 : -1;
         }
 
         // Ensure target is within grid bounds
         if (targetRow >= 0 && targetRow < rowCount && targetCol >= 0 && targetCol < colCount) {
             touchTargetCandy.current = grid[targetRow][targetCol];
-            console.log("Touch move to candy:", JSON.stringify(touchTargetCandy.current), "dx:", dx, "dy:", dy);
+            console.log("Touch move to candy:", JSON.stringify(touchTargetCandy.current));
         } else {
             touchTargetCandy.current = null;
             console.log("Touch move out of bounds: row", targetRow, "col", targetCol);
