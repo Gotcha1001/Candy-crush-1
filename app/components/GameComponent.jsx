@@ -3367,21 +3367,22 @@ import { levels } from "../data/levels";
 import SaveGameComponent from "./SaveGameComponent";
 
 const Candy = ({ candy, onDragStart, onDragOver, onDrop, onTouchStart, onTouchMove, onTouchEnd, isDragging, isMatched, isJelly, shell, candySize }) => {
+    const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
     return (
         <motion.div
             layout
             key={candy.id}
             className={`
-        rounded-md select-none
-        ${isDragging ? "z-50 opacity-80" : "z-10"}
-        ${isMatched ? "opacity-20" : ""}
-        relative
-        ${shell && shell.hits > 0 ? "cursor-not-allowed" : "cursor-grab active:cursor-grabbing"}
-      `}
+                rounded-md select-none
+                ${isDragging ? "z-50 opacity-80" : "z-10"}
+                ${isMatched ? "opacity-20" : ""}
+                relative
+                ${shell && shell.hits > 0 ? "cursor-not-allowed" : "cursor-grab active:cursor-grabbing"}
+            `}
             style={{
                 width: candySize,
                 height: candySize,
-                touchAction: shell && shell.hits > 0 ? "auto" : "manipulation", // Allows swipe gestures
+                touchAction: shell && shell.hits > 0 ? "auto" : isMobile ? "none" : "auto",
             }}
             draggable={!(shell && shell.hits > 0)}
             onDragStart={(e) => {
@@ -3395,19 +3396,18 @@ const Candy = ({ candy, onDragStart, onDragOver, onDrop, onTouchStart, onTouchMo
             onDrop={(e) => onDrop(e, candy)}
             onDragEnd={(e) => e.preventDefault()}
             onTouchStart={(e) => {
-                if (shell && shell.hits > 0) {
-                    e.preventDefault();
-                    return;
-                }
-                e.stopPropagation(); // Prevents parent interference
+                if (shell && shell.hits > 0) return;
+                e.preventDefault();
                 onTouchStart(e, candy);
             }}
             onTouchMove={(e) => {
-                e.stopPropagation();
-                onTouchMove(e);
+                if (shell && shell.hits > 0) return;
+                e.preventDefault();
+                onTouchMove(e, candy);
             }}
             onTouchEnd={(e) => {
-                e.stopPropagation();
+                if (shell && shell.hits > 0) return;
+                e.preventDefault();
                 onTouchEnd(e, candy);
             }}
             animate={{
@@ -3459,24 +3459,25 @@ const GameGrid = ({
     }
 
     const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
-    const baseSize = isMobile ? 40 : 60; // Smaller base size for mobile
-    const maxSize = isMobile ? 45 : 80; // Smaller max size for mobile
+    const baseSize = isMobile ? 40 : 60;
+    const maxSize = isMobile ? 45 : 80;
     const availableWidth = isMobile
-        ? Math.min(window.innerWidth * 0.95, 360) // Tighter fit for mobile
+        ? Math.min(window.innerWidth * 0.95, 360)
         : Math.min(window.innerWidth * 0.6, 600);
-    const containerPadding = 16; // Reduced padding
-    const totalGaps = 2 * (gridSize - 1); // Reduced gap size
+    const containerPadding = 16;
+    const totalGaps = 2 * (gridSize - 1);
     const availableCandySpace = availableWidth - containerPadding - totalGaps;
     const candySize = Math.max(Math.min(Math.floor(availableCandySpace / gridSize), maxSize), baseSize);
 
     return (
         <div
-            className="grid gap-0.5 bg-white/20 p-2 rounded-xl mx-auto overflow-hidden" // Reduced gap and padding
+            className="grid gap-0.5 bg-white/20 p-2 rounded-xl mx-auto overflow-hidden"
             style={{
                 gridTemplateColumns: `repeat(${gridSize}, ${candySize}px)`,
                 width: `${gridSize * candySize + totalGaps + containerPadding}px`,
-                maxWidth: "100%", // Prevents overflow
+                maxWidth: "100%",
             }}
+            onTouchMove={(e) => onTouchMove(e)}
         >
             <AnimatePresence>
                 {grid.map((row, rowIndex) =>
@@ -3569,24 +3570,14 @@ const GameComponent = ({ levelConfig }) => {
     const touchTargetCandy = useRef(null);
     const router = useRouter();
 
-    // Initialize game state and check for loaded state
     useEffect(() => {
-        console.log(
-            "Initializing level:",
-            levelConfig.id,
-            "Type:",
-            typeof levelConfig.id,
-            "Total levels:",
-            levels.length
-        );
+        console.log("Initializing level:", levelConfig.id);
         const savedState = sessionStorage.getItem("loadedGameState");
         if (savedState) {
             try {
                 const parsedState = JSON.parse(savedState);
                 parsedState.matchedCandies = new Set(parsedState.matchedCandies);
-                const savedLevelId = Number(parsedState.levelConfig.id);
-                console.log("Restoring saved state for level:", savedLevelId, "Current level:", levelConfig.id);
-                if (savedLevelId === Number(levelConfig.id)) {
+                if (Number(parsedState.levelConfig.id) === Number(levelConfig.id)) {
                     setGrid(parsedState.grid);
                     setJellyGrid(parsedState.jellyGrid);
                     setShellGrid(parsedState.shellGrid);
@@ -3596,55 +3587,31 @@ const GameComponent = ({ levelConfig }) => {
                     setGameStatus(parsedState.gameStatus);
                     setMatchedCandies(parsedState.matchedCandies);
                     setIsAnimating(parsedState.isAnimating);
-                    console.log("Game state restored for level:", levelConfig.id);
                     sessionStorage.removeItem("loadedGameState");
                 } else {
-                    console.warn(
-                        "Level mismatch on restore: saved level",
-                        savedLevelId,
-                        "vs current level",
-                        levelConfig.id,
-                        "Initializing fresh game."
-                    );
-                    const { grid } = initializeGrid(levelConfig.gridSize, levelConfig.id);
-                    setGrid(grid);
-                    if (levelConfig.goal.type === "jelly") {
-                        const jellyGrid = initializeJellyGrid(levelConfig.gridSize, levelConfig.goal.count);
-                        setJellyGrid(jellyGrid);
-                        setRemainingJellies(jellyGrid.flat().filter(Boolean).length);
-                    }
-                    const newShellGrid = initializeShellGrid(levelConfig.gridSize, levelConfig.id);
-                    setShellGrid(newShellGrid);
-                    sessionStorage.removeItem("loadedGameState");
+                    initializeNewGame();
                 }
             } catch (error) {
-                console.warn("Error restoring saved state, initializing fresh game:", error);
-                const { grid } = initializeGrid(levelConfig.gridSize, levelConfig.id);
-                setGrid(grid);
-                if (levelConfig.goal.type === "jelly") {
-                    const jellyGrid = initializeJellyGrid(levelConfig.gridSize, levelConfig.goal.count);
-                    setJellyGrid(jellyGrid);
-                    setRemainingJellies(jellyGrid.flat().filter(Boolean).length);
-                }
-                const newShellGrid = initializeShellGrid(levelConfig.gridSize, levelConfig.id);
-                setShellGrid(newShellGrid);
-                sessionStorage.removeItem("loadedGameState");
+                console.warn("Error restoring saved state:", error);
+                initializeNewGame();
             }
         } else {
-            console.log("No saved state found, initializing fresh game for level:", levelConfig.id);
-            const { grid } = initializeGrid(levelConfig.gridSize, levelConfig.id);
-            setGrid(grid);
-            if (levelConfig.goal.type === "jelly") {
-                const jellyGrid = initializeJellyGrid(levelConfig.gridSize, levelConfig.goal.count);
-                setJellyGrid(jellyGrid);
-                setRemainingJellies(jellyGrid.flat().filter(Boolean).length);
-            }
-            const newShellGrid = initializeShellGrid(levelConfig.gridSize, levelConfig.id);
-            setShellGrid(newShellGrid);
+            initializeNewGame();
         }
     }, [levelConfig]);
 
-    // Background music
+    const initializeNewGame = () => {
+        const { grid } = initializeGrid(levelConfig.gridSize, levelConfig.id);
+        setGrid(grid);
+        if (levelConfig.goal.type === "jelly") {
+            const jellyGrid = initializeJellyGrid(levelConfig.gridSize, levelConfig.goal.count);
+            setJellyGrid(jellyGrid);
+            setRemainingJellies(jellyGrid.flat().filter(Boolean).length);
+        }
+        const newShellGrid = initializeShellGrid(levelConfig.gridSize, levelConfig.id);
+        setShellGrid(newShellGrid);
+    };
+
     useEffect(() => {
         const audio = new Audio("/sounds/background-music.mp3");
         audio.loop = true;
@@ -3655,47 +3622,22 @@ const GameComponent = ({ levelConfig }) => {
         };
     }, []);
 
-    // Native touchmove listener for mobile
-    useEffect(() => {
-        const handleMove = (e) => {
-            if (isAnimating) return;
-            e.preventDefault(); // Prevents default scrolling
-            handleTouchMove(e);
-        };
-
-        const grid = document.querySelector(".grid");
-        if (grid) {
-            grid.addEventListener("touchmove", handleMove, { passive: false }); // Ensures preventDefault works
-        }
-
-        return () => {
-            if (grid) {
-                grid.removeEventListener("touchmove", handleMove);
-            }
-        };
-    }, [isAnimating]);
-
-    // Check win condition
     useEffect(() => {
         if (gameStatus === "playing" && !isAnimating) {
             if (levelConfig.goal.type === "jelly" && remainingJellies === 0) {
-                console.log("Jelly level won! Level:", levelConfig.id, "Remaining jellies:", remainingJellies);
                 setGameStatus("won");
             } else if (levelConfig.goal.type === "score" && score >= levelConfig.goal.target) {
-                console.log("Score level won! Level:", levelConfig.id, "Score:", score, "Target:", levelConfig.goal.target);
                 setGameStatus("won");
             }
         }
     }, [remainingJellies, score, gameStatus, isAnimating, levelConfig]);
 
-    // Check lose condition
     useEffect(() => {
         if (gameStatus === "playing" && movesLeft === 0) {
             const goalMet =
                 (levelConfig.goal.type === "jelly" && remainingJellies === 0) ||
                 (levelConfig.goal.type === "score" && score >= levelConfig.goal.target);
             if (!goalMet) {
-                console.log("Game lost! Level:", levelConfig.id, "Moves left:", movesLeft, "Jellies left:", remainingJellies, "Score:", score);
                 setGameStatus("lost");
             }
         }
@@ -3714,7 +3656,7 @@ const GameComponent = ({ levelConfig }) => {
         setDraggedCandy(candy);
         e.dataTransfer.effectAllowed = "move";
         e.dataTransfer.setData("text/plain", JSON.stringify(candy));
-        console.log("Drag start on candy:", JSON.stringify(candy));
+        console.log("DragStart:", candy);
     };
 
     const handleDragOver = (e, candy) => {
@@ -3724,15 +3666,12 @@ const GameComponent = ({ levelConfig }) => {
 
     const handleDrop = async (e, targetCandy) => {
         e.preventDefault();
-        e.stopPropagation();
         const now = Date.now();
         if (now - lastDropTimestamp.current < 300) {
-            console.log("Debounced duplicate drop event, timestamp:", now);
             setDraggedCandy(null);
             return;
         }
         lastDropTimestamp.current = now;
-        console.log("handleDrop called, draggedCandy:", JSON.stringify(draggedCandy), "targetCandy:", JSON.stringify(targetCandy));
         if (!draggedCandy || !targetCandy || isAnimating || gameStatus !== "playing") {
             setDraggedCandy(null);
             return;
@@ -3773,82 +3712,72 @@ const GameComponent = ({ levelConfig }) => {
             setGrid(finalGrid);
             if (levelConfig.goal.type === "jelly" && finalJellyGrid) {
                 setJellyGrid(finalJellyGrid);
-                const newRemainingJellies = finalJellyGrid.flat().filter(Boolean).length;
-                setRemainingJellies(newRemainingJellies);
-                console.log("Updated remaining jellies for level", levelConfig.id, ":", newRemainingJellies);
+                setRemainingJellies(finalJellyGrid.flat().filter(Boolean).length);
             }
             if (finalShellGrid) {
                 setShellGrid(finalShellGrid);
             }
         } else {
             setGrid(swappedGrid);
-            setTimeout(() => {
-                setGrid(grid);
-            }, 300);
+            setTimeout(() => setGrid(grid), 300);
         }
         setIsAnimating(false);
         setDraggedCandy(null);
     };
 
-    // Touch event handlers
     const handleTouchStart = (e, candy) => {
-        if (isAnimating || gameStatus !== "playing") {
-            e.preventDefault();
-            return;
-        }
+        if (isAnimating || gameStatus !== "playing") return;
         const { row, col } = candy;
-        if (shellGrid && shellGrid[row][col] && shellGrid[row][col].hits > 0) {
-            e.preventDefault();
-            return;
-        }
+        if (shellGrid && shellGrid[row][col] && shellGrid[row][col].hits > 0) return;
         touchStartCandy.current = candy;
         touchStartPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-        setJPEGgedCandy(candy);
-        console.log("Touch start on candy:", JSON.stringify(candy), "at", touchStartPos.current);
-        if (navigator.vibrate) navigator.vibrate(50); // Haptic feedback
+        setDraggedCandy(candy);
+        console.log("TouchStart:", candy, "Position:", touchStartPos.current);
+        if (navigator.vibrate) navigator.vibrate(50);
     };
 
-    const handleTouchMove = (e) => {
-        e.preventDefault();
+    const handleTouchMove = (e, candy) => {
+        if (!touchStartCandy.current || isAnimating) return;
         const touch = e.touches[0];
         const dx = touch.clientX - touchStartPos.current.x;
         const dy = touch.clientY - touchStartPos.current.y;
-        const candySizeNum = parseFloat(candySize);
-        const gridElement = document.querySelector(".grid");
-        if (!gridElement || !touchStartCandy.current) {
-            console.log("Touch move aborted: no grid or start candy");
-            return;
-        }
-        const rowCount = grid.length;
-        const colCount = grid[0].length;
-        // Calculate swipe direction
+        const isMobile = window.innerWidth < 768;
+        const candySizeNum = isMobile ? 40 : 60;
+        const threshold = candySizeNum * 0.1;
         const absDx = Math.abs(dx);
         const absDy = Math.abs(dy);
+
+        console.log("TouchMove: dx=", dx, "dy=", dy, "threshold=", threshold);
+
         let targetRow = touchStartCandy.current.row;
         let targetCol = touchStartCandy.current.col;
-        console.log("Touch move detected, dx:", dx, "dy:", dy);
-        if (absDx > absDy && absDx > candySizeNum * 0.2) { // Lowered threshold for sensitivity
+
+        if (absDx > absDy && absDx > threshold) {
             targetCol += dx > 0 ? 1 : -1;
-        } else if (absDy > absDx && absDy > candySizeNum * 0.2) {
+        } else if (absDy > absDx && absDy > threshold) {
             targetRow += dy > 0 ? 1 : -1;
         }
-        // Ensure target is within grid bounds
-        if (targetRow >= 0 && targetRow < rowCount && targetCol >= 0 && targetCol < colCount) {
+
+        if (
+            targetRow >= 0 && targetRow < grid.length &&
+            targetCol >= 0 && targetCol < grid[0].length
+        ) {
             touchTargetCandy.current = grid[targetRow][targetCol];
-            console.log("Touch move to candy:", JSON.stringify(touchTargetCandy.current));
+            console.log("TargetCandy:", touchTargetCandy.current);
         } else {
             touchTargetCandy.current = null;
-            console.log("Touch move out of bounds: row", targetRow, "col", targetCol);
+            console.log("Swipe out of bounds: row=", targetRow, "col=", targetCol);
         }
     };
 
     const handleTouchEnd = (e) => {
-        e.preventDefault();
-        if (touchStartCandy.current && touchTargetCandy.current && areAdjacent(touchStartCandy.current, touchTargetCandy.current)) {
-            console.log("Touch end, attempting swap:", JSON.stringify(touchStartCandy.current), "to", JSON.stringify(touchTargetCandy.current));
+        console.log("TouchEnd: Start=", touchStartCandy.current, "Target=", touchTargetCandy.current);
+        if (
+            touchStartCandy.current &&
+            touchTargetCandy.current &&
+            areAdjacent(touchStartCandy.current, touchTargetCandy.current)
+        ) {
             handleDrop(e, touchTargetCandy.current);
-        } else {
-            console.log("No valid swipe detected, start:", JSON.stringify(touchStartCandy.current), "target:", JSON.stringify(touchTargetCandy.current));
         }
         touchStartCandy.current = null;
         touchStartPos.current = null;
@@ -3857,17 +3786,8 @@ const GameComponent = ({ levelConfig }) => {
     };
 
     const resetGame = () => {
-        console.log("Resetting game for level:", levelConfig.id);
         sessionStorage.removeItem("loadedGameState");
-        const { grid } = initializeGrid(levelConfig.gridSize, levelConfig.id);
-        setGrid(grid);
-        if (levelConfig.goal.type === "jelly") {
-            const newJellyGrid = initializeJellyGrid(levelConfig.gridSize, levelConfig.goal.count);
-            setJellyGrid(newJellyGrid);
-            setRemainingJellies(newJellyGrid.flat().filter(Boolean).length);
-        }
-        const newShellGrid = initializeShellGrid(levelConfig.gridSize, levelConfig.id);
-        setShellGrid(newShellGrid);
+        initializeNewGame();
         setScore(0);
         setMovesLeft(levelConfig.moves);
         setGameStatus("playing");
@@ -3880,20 +3800,15 @@ const GameComponent = ({ levelConfig }) => {
         const nextLevelId = Number(levelConfig.id) + 1;
         sessionStorage.removeItem("loadedGameState");
         if (nextLevelId <= levels.length) {
-            console.log("Navigating to next level:", nextLevelId);
             router.push(`/game/${nextLevelId}`);
         } else {
-            console.log("No more levels available, redirecting to home");
             router.push("/");
         }
     };
 
     const getGoalText = (goal) => {
-        if (goal.type === "score") {
-            return `Score ${goal.target} points`;
-        } else if (goal.type === "jelly") {
-            return `Clear all jellies`;
-        }
+        if (goal.type === "score") return `Score ${goal.target} points`;
+        if (goal.type === "jelly") return `Clear all jellies`;
         return "";
     };
 
@@ -3907,7 +3822,7 @@ const GameComponent = ({ levelConfig }) => {
         gameStatus,
         matchedCandies,
         isAnimating,
-        levelConfig,
+        levelConfig
     };
 
     return (
@@ -3986,7 +3901,7 @@ const GameComponent = ({ levelConfig }) => {
                         🎯 Goal: {getGoalText(levelConfig.goal)} in {levelConfig.moves} moves
                     </p>
                     <p className="text-white/60 text-sm mt-1">
-                        Swipe candies to make matches of 3 or more! Swap a rainbow candy with any candy to clear all of that color! Break shells by making matches nearby!
+                        Swipe candies to make matches of 3 or more!
                     </p>
                 </div>
             </motion.div>
