@@ -2726,7 +2726,7 @@ const Candy = ({ candy, onDragStart, onDragOver, onDrop, onTouchStart, onTouchMo
             style={{
                 width: candySize,
                 height: candySize,
-                touchAction: shell && shell.hits > 0 ? "auto" : "none", // Prevent default touch scrolling
+                touchAction: shell && shell.hits > 0 ? "auto" : "none",
             }}
             draggable={!(shell && shell.hits > 0)}
             onDragStart={(e) => {
@@ -2797,8 +2797,8 @@ const GameGrid = ({
     }
 
     const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
-    const baseSize = isMobile ? 45 : 60;
-    const maxSize = isMobile ? 50 : 80;
+    const baseSize = isMobile ? 50 : 60; // Increased baseSize for mobile
+    const maxSize = isMobile ? 55 : 80;
     const availableWidth = isMobile
         ? Math.min(window.innerWidth * 0.9, 400)
         : Math.min(window.innerWidth * 0.6, 600);
@@ -2835,6 +2835,8 @@ const GameGrid = ({
                                 delay: (rowIndex + colIndex * 0.1) * 0.05 + Math.random() * 0.1,
                             }}
                             onDragOver={(e) => onDragOver(e, candy)}
+                            data-row={rowIndex}
+                            data-col={colIndex}
                         >
                             <Candy
                                 candy={candy}
@@ -2901,6 +2903,7 @@ const GameComponent = ({ levelConfig }) => {
     const [isAnimating, setIsAnimating] = useState(false);
     const lastDropTimestamp = useRef(0);
     const touchStartCandy = useRef(null);
+    const touchStartPos = useRef(null);
     const touchTargetCandy = useRef(null);
     const router = useRouter();
 
@@ -2932,7 +2935,7 @@ const GameComponent = ({ levelConfig }) => {
                     setMatchedCandies(parsedState.matchedCandies);
                     setIsAnimating(parsedState.isAnimating);
                     console.log("Game state restored for level:", levelConfig.id);
-                    sessionStorage.removeItem("loadedGameState"); // Clear after successful restore
+                    sessionStorage.removeItem("loadedGameState");
                 } else {
                     console.warn(
                         "Level mismatch on restore: saved level",
@@ -2941,7 +2944,6 @@ const GameComponent = ({ levelConfig }) => {
                         levelConfig.id,
                         "Initializing fresh game."
                     );
-                    // Initialize fresh game without alerting
                     const { grid } = initializeGrid(levelConfig.gridSize, levelConfig.id);
                     setGrid(grid);
                     if (levelConfig.goal.type === "jelly") {
@@ -2951,11 +2953,10 @@ const GameComponent = ({ levelConfig }) => {
                     }
                     const newShellGrid = initializeShellGrid(levelConfig.gridSize, levelConfig.id);
                     setShellGrid(newShellGrid);
-                    sessionStorage.removeItem("loadedGameState"); // Clear after mismatch
+                    sessionStorage.removeItem("loadedGameState");
                 }
             } catch (error) {
                 console.warn("Error restoring saved state, initializing fresh game:", error);
-                // Initialize fresh game without alerting
                 const { grid } = initializeGrid(levelConfig.gridSize, levelConfig.id);
                 setGrid(grid);
                 if (levelConfig.goal.type === "jelly") {
@@ -2965,7 +2966,7 @@ const GameComponent = ({ levelConfig }) => {
                 }
                 const newShellGrid = initializeShellGrid(levelConfig.gridSize, levelConfig.id);
                 setShellGrid(newShellGrid);
-                sessionStorage.removeItem("loadedGameState"); // Clear after error
+                sessionStorage.removeItem("loadedGameState");
             }
         } else {
             console.log("No saved state found, initializing fresh game for level:", levelConfig.id);
@@ -3118,40 +3119,63 @@ const GameComponent = ({ levelConfig }) => {
             return;
         }
         touchStartCandy.current = candy;
+        touchStartPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
         setDraggedCandy(candy);
-        console.log("Touch start on candy:", JSON.stringify(candy));
+        console.log("Touch start on candy:", JSON.stringify(candy), "at", touchStartPos.current);
     };
 
     const handleTouchMove = (e) => {
-        e.preventDefault(); // Prevent scrolling
+        e.preventDefault();
         const touch = e.touches[0];
-        const targetElement = document.elementFromPoint(touch.clientX, touch.clientY);
-        if (targetElement) {
-            const candyElement = targetElement.closest(".select-none");
-            if (candyElement) {
-                const row = Number(candyElement.parentElement.dataset.row);
-                const col = Number(candyElement.parentElement.dataset.col);
-                if (!isNaN(row) && !isNaN(col)) {
-                    touchTargetCandy.current = grid[row][col];
-                }
-            }
+        const dx = touch.clientX - touchStartPos.current.x;
+        const dy = touch.clientY - touchStartPos.current.y;
+        const candySizeNum = parseFloat(candySize);
+        const gridElement = document.querySelector(".grid");
+        if (!gridElement || !touchStartCandy.current) return;
+
+        const gridRect = gridElement.getBoundingClientRect();
+        const rowCount = grid.length;
+        const colCount = grid[0].length;
+
+        // Calculate the swipe direction
+        const absDx = Math.abs(dx);
+        const absDy = Math.abs(dy);
+        let targetRow = touchStartCandy.current.row;
+        let targetCol = touchStartCandy.current.col;
+
+        if (absDx > absDy && absDx > candySizeNum * 0.3) {
+            targetCol += dx > 0 ? 1 : -1;
+        } else if (absDy > absDx && absDy > candySizeNum * 0.3) {
+            targetRow += dy > 0 ? 1 : -1;
+        }
+
+        // Ensure target is within grid bounds
+        if (targetRow >= 0 && targetRow < rowCount && targetCol >= 0 && targetCol < colCount) {
+            touchTargetCandy.current = grid[targetRow][targetCol];
+            console.log("Touch move to candy:", JSON.stringify(touchTargetCandy.current), "dx:", dx, "dy:", dy);
+        } else {
+            touchTargetCandy.current = null;
+            console.log("Touch move out of bounds: row", targetRow, "col", targetCol);
         }
     };
 
-    const handleTouchEnd = (e, candy) => {
+    const handleTouchEnd = (e) => {
         e.preventDefault();
         if (touchStartCandy.current && touchTargetCandy.current && areAdjacent(touchStartCandy.current, touchTargetCandy.current)) {
             console.log("Touch end, attempting swap:", JSON.stringify(touchStartCandy.current), "to", JSON.stringify(touchTargetCandy.current));
             handleDrop(e, touchTargetCandy.current);
+        } else {
+            console.log("No valid swipe detected, start:", JSON.stringify(touchStartCandy.current), "target:", JSON.stringify(touchTargetCandy.current));
         }
         touchStartCandy.current = null;
+        touchStartPos.current = null;
         touchTargetCandy.current = null;
         setDraggedCandy(null);
     };
 
     const resetGame = () => {
         console.log("Resetting game for level:", levelConfig.id);
-        sessionStorage.removeItem("loadedGameState"); // Clear sessionStorage on reset
+        sessionStorage.removeItem("loadedGameState");
         const { grid } = initializeGrid(levelConfig.gridSize, levelConfig.id);
         setGrid(grid);
         if (levelConfig.goal.type === "jelly") {
@@ -3171,7 +3195,7 @@ const GameComponent = ({ levelConfig }) => {
 
     const goToNextLevel = () => {
         const nextLevelId = Number(levelConfig.id) + 1;
-        sessionStorage.removeItem("loadedGameState"); // Clear sessionStorage before navigating
+        sessionStorage.removeItem("loadedGameState");
         if (nextLevelId <= levels.length) {
             console.log("Navigating to next level:", nextLevelId);
             router.push(`/game/${nextLevelId}`);
@@ -3279,7 +3303,7 @@ const GameComponent = ({ levelConfig }) => {
                         🎯 Goal: {getGoalText(levelConfig.goal)} in {levelConfig.moves} moves
                     </p>
                     <p className="text-white/60 text-sm mt-1">
-                        Drag or swipe candies to make matches of 3 or more! Swap a rainbow candy with any candy to clear all of that color! Break shells by making matches nearby!
+                        Swipe candies to make matches of 3 or more! Swap a rainbow candy with any candy to clear all of that color! Break shells by making matches nearby!
                     </p>
                 </div>
             </motion.div>
